@@ -1,0 +1,28 @@
+# 环境变量（包含 API Keys，绝对不能提交）
+.env
+
+# 生成产物
+output/
+temp/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# 虚拟环境
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 本地图片（用户自己的素材）
+local_images/

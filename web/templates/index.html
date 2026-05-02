@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 视频生成器</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            font-size: 32px;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #8892b0;
+            margin-bottom: 32px;
+            font-size: 14px;
+        }
+        .card {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #ccd6f6;
+            font-weight: 500;
+        }
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            background: rgba(0,0,0,0.25);
+            color: #fff;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, textarea:focus, select:focus {
+            border-color: #e94560;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        select {
+            cursor: pointer;
+        }
+        select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .progress-area {
+            margin-top: 24px;
+            display: none;
+        }
+        .progress-area.active { display: block; }
+        .progress-bar-bg {
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            border-radius: 4px;
+            transition: width 0.4s ease;
+            width: 0%;
+        }
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: #8892b0;
+        }
+        .progress-info .status {
+            color: #ccd6f6;
+        }
+        .result-area {
+            margin-top: 24px;
+            display: none;
+        }
+        .result-area.active { display: block; }
+        .result-area video {
+            width: 100%;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            background: #000;
+        }
+        .result-actions {
+            display: flex;
+            gap: 12px;
+        }
+        .result-actions a {
+            flex: 1;
+            text-align: center;
+            padding: 12px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            color: #fff;
+        }
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #ccd6f6;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .error-msg {
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: rgba(233, 69, 96, 0.15);
+            border: 1px solid rgba(233, 69, 96, 0.3);
+            border-radius: 10px;
+            color: #ff8a9b;
+            font-size: 13px;
+            display: none;
+        }
+        .error-msg.active { display: block; }
+        .story-preview {
+            margin-top: 16px;
+            padding: 16px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            font-size: 13px;
+            line-height: 1.7;
+            color: #a8b2d1;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+            white-space: pre-wrap;
+        }
+        .story-preview.active { display: block; }
+        .story-preview h4 {
+            color: #ccd6f6;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .confirm-area {
+            margin-top: 16px;
+            display: none;
+            gap: 12px;
+        }
+        .confirm-area.active { display: flex; }
+        .confirm-area .btn {
+            flex: 1;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #ccd6f6;
+        }
+        .btn-outline:hover {
+            background: rgba(255,255,255,0.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI 视频生成器</h1>
+        <p class="subtitle">输入主题，自动生成故事解说视频</p>
+
+        <div class="card">
+            <div class="form-group">
+                <label for="topic">视频主题</label>
+                <input type="text" id="topic" placeholder="例如：故宫的未解之谜" value="">
+            </div>
+
+            <div class="form-group">
+                <label for="extra">额外要求（可选）</label>
+                <textarea id="extra" placeholder="例如：悬疑风格、每段要有紧张感、适合抖音..."></textarea>
+            </div>
+
+            <div class="row">
+                <div class="form-group">
+                    <label for="aspect_ratio">画面比例</label>
+                    <select id="aspect_ratio">
+                        <option value="16:9">16:9 横屏（B站/YouTube）</option>
+                        <option value="9:16" selected>9:16 竖屏（抖音/视频号）</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="voice">配音音色</label>
+                    <select id="voice">
+                        <option value="cixingnansheng" selected>磁性男声</option>
+                        <option value="shuairunansheng">温润男声</option>
+                        <option value="qingcunvsheng">青春女声</option>
+                        <option value="wenrouvsheng">温柔女声</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 4px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="autoMode" style="width: auto;">
+                    <span>全自动模式（跳过文稿确认，直接生成视频）</span>
+                </label>
+            </div>
+
+            <button class="btn" id="generateBtn" onclick="startGenerate()">开始生成</button>
+
+            <div class="progress-area" id="progressArea">
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progressBar"></div>
+                </div>
+                <div class="progress-info">
+                    <span class="status" id="statusText">准备中...</span>
+                    <span id="percentText">0%</span>
+                </div>
+            </div>
+
+            <div class="story-preview" id="storyPreview">
+                <h4>故事文稿（请审核确认）</h4>
+                <div id="storyContent"></div>
+            </div>
+
+            <div class="confirm-area" id="confirmArea">
+                <button class="btn btn-outline" id="regenerateBtn" onclick="regenerateStory()">重新生成</button>
+                <button class="btn" id="confirmBtn" onclick="confirmStory()">确认生成视频</button>
+            </div>
+
+            <div class="error-msg" id="errorMsg"></div>
+
+            <div class="result-area" id="resultArea">
+                <video id="resultVideo" controls></video>
+                <div class="result-actions">
+                    <a href="#" class="btn-primary" id="downloadBtn">下载视频</a>
+                    <a href="#" class="btn-secondary" onclick="location.reload()">再做一个</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pollTimer = null;
+        let currentTaskId = null;
+
+        async function startGenerate() {
+            const topic = document.getElementById('topic').value.trim();
+            if (!topic) {
+                alert('请输入视频主题');
+                return;
+            }
+
+            resetUI();
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = true;
+            btn.textContent = '生成中...';
+
+            const data = {
+                topic: topic,
+                extra: document.getElementById('extra').value.trim(),
+                aspect_ratio: document.getElementById('aspect_ratio').value,
+                voice: document.getElementById('voice').value,
+                auto: document.getElementById('autoMode').checked,
+            };
+
+            try {
+                const resp = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await resp.json();
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                currentTaskId = result.task_id;
+                pollStatus(result.task_id);
+            } catch (e) {
+                showError(e.message);
+                btn.disabled = false;
+                btn.textContent = '开始生成';
+            }
+        }
+
+        function resetUI() {
+            document.getElementById('progressArea').classList.add('active');
+            document.getElementById('resultArea').classList.remove('active');
+            document.getElementById('errorMsg').classList.remove('active');
+            document.getElementById('storyPreview').classList.remove('active');
+            document.getElementById('confirmArea').classList.remove('active');
+            document.getElementById('storyContent').textContent = '';
+            updateProgress(0, '准备中...');
+        }
+
+        function pollStatus(taskId) {
+            if (pollTimer) clearInterval(pollTimer);
+
+            pollTimer = setInterval(async () => {
+                try {
+                    const resp = await fetch('/api/status/' + taskId);
+                    const task = await resp.json();
+                    if (task.error) {
+                        throw new Error(task.error);
+                    }
+
+                    updateProgress(task.progress, task.message);
+
+                    // 故事稿已生成，等待确认
+                    if (task.status === 'awaiting_confirmation') {
+                        clearInterval(pollTimer);
+                        showStoryForConfirmation(task);
+                        return;
+                    }
+
+                    if (task.status === 'completed') {
+                        clearInterval(pollTimer);
+                        showResult(task.output_rel_path || task.output_file, task.output_file);
+                    } else if (task.status === 'failed') {
+                        clearInterval(pollTimer);
+                        showError(task.message + '\n' + (task.traceback || ''));
+                    }
+                } catch (e) {
+                    clearInterval(pollTimer);
+                    showError('查询状态失败: ' + e.message);
+                }
+            }, 2000);
+        }
+
+        function showStoryForConfirmation(task) {
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = true;
+            btn.textContent = '等待确认...';
+
+            document.getElementById('storyContent').textContent = task.story || task.story_preview || '';
+            document.getElementById('storyPreview').classList.add('active');
+            document.getElementById('confirmArea').classList.add('active');
+            document.getElementById('progressArea').classList.remove('active');
+        }
+
+        async function confirmStory() {
+            if (!currentTaskId) return;
+            document.getElementById('confirmBtn').disabled = true;
+            document.getElementById('regenerateBtn').disabled = true;
+            document.getElementById('confirmBtn').textContent = '处理中...';
+
+            try {
+                const resp = await fetch('/api/confirm/' + currentTaskId, { method: 'POST' });
+                const result = await resp.json();
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                document.getElementById('confirmArea').classList.remove('active');
+                document.getElementById('progressArea').classList.add('active');
+                pollStatus(currentTaskId);
+            } catch (e) {
+                showError(e.message);
+                document.getElementById('confirmBtn').disabled = false;
+                document.getElementById('regenerateBtn').disabled = false;
+                document.getElementById('confirmBtn').textContent = '确认生成视频';
+            }
+        }
+
+        async function regenerateStory() {
+            if (!currentTaskId) return;
+            document.getElementById('confirmBtn').disabled = true;
+            document.getElementById('regenerateBtn').disabled = true;
+            document.getElementById('regenerateBtn').textContent = '重新生成中...';
+
+            try {
+                const resp = await fetch('/api/regenerate/' + currentTaskId, { method: 'POST' });
+                const result = await resp.json();
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                document.getElementById('confirmArea').classList.remove('active');
+                document.getElementById('storyPreview').classList.remove('active');
+                document.getElementById('progressArea').classList.add('active');
+                pollStatus(currentTaskId);
+            } catch (e) {
+                showError(e.message);
+                document.getElementById('confirmBtn').disabled = false;
+                document.getElementById('regenerateBtn').disabled = false;
+                document.getElementById('regenerateBtn').textContent = '重新生成';
+            }
+        }
+
+        function updateProgress(percent, message) {
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('statusText').textContent = message;
+            document.getElementById('percentText').textContent = percent + '%';
+        }
+
+        function showResult(filePath, downloadName) {
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = false;
+            btn.textContent = '开始生成';
+            document.getElementById('confirmArea').classList.remove('active');
+            document.getElementById('storyPreview').classList.remove('active');
+            document.getElementById('progressArea').classList.remove('active');
+            const resultArea = document.getElementById('resultArea');
+            resultArea.classList.add('active');
+
+            const video = document.getElementById('resultVideo');
+            video.src = '/api/download/' + encodeURIComponent(filePath);
+
+            const downloadBtn = document.getElementById('downloadBtn');
+            downloadBtn.href = '/api/download/' + encodeURIComponent(filePath);
+            downloadBtn.download = downloadName || filePath.split('/').pop();
+        }
+
+        function showError(msg) {
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = false;
+            btn.textContent = '开始生成';
+            document.getElementById('confirmBtn').disabled = false;
+            document.getElementById('regenerateBtn').disabled = false;
+            document.getElementById('progressArea').classList.remove('active');
+            document.getElementById('confirmArea').classList.remove('active');
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.classList.add('active');
+            console.error(msg);
+        }
+    </script>
+</body>
+</html>
