@@ -73,6 +73,25 @@
             background: #1a1a2e;
             color: #fff;
         }
+        .aspect-options {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .aspect-options label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 400;
+            margin-bottom: 0;
+            cursor: pointer;
+            font-size: 14px;
+            color: #ccd6f6;
+        }
+        .aspect-options input[type="checkbox"] {
+            width: auto;
+            accent-color: #e94560;
+        }
         .row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -130,12 +149,31 @@
             display: none;
         }
         .result-area.active { display: block; }
-        .result-area video {
+        .output-label {
+            font-size: 14px;
+            color: #ccd6f6;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .result-item { margin-bottom: 24px; }
+        .result-item video {
             width: 100%;
             border-radius: 12px;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             background: #000;
         }
+        .result-item a {
+            display: block;
+            text-align: center;
+            padding: 12px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            color: #fff;
+        }
+        .result-item a:hover { opacity: 0.9; }
         .result-actions {
             display: flex;
             gap: 12px;
@@ -205,6 +243,76 @@
         .btn-outline:hover {
             background: rgba(255,255,255,0.05);
         }
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .upload-label {
+            font-size: 12px;
+            color: #8892b0;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px dashed rgba(255,255,255,0.25);
+            border-radius: 10px;
+            background: rgba(0,0,0,0.25);
+            color: #8892b0;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        input[type="file"]::file-selector-button {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #ccd6f6;
+            border-radius: 6px;
+            padding: 6px 10px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        /* 分段列表 + 改词重跑（D6）：成片后逐段改词，只重跑被改段 */
+        .segments-area {
+            margin-top: 20px;
+            display: none;
+        }
+        .segments-area.active { display: block; }
+        .segments-area h4 {
+            color: #ccd6f6;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+        .segment-item {
+            background: rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        .segment-item .seg-meta {
+            font-size: 12px;
+            color: #8892b0;
+            margin-bottom: 6px;
+        }
+        .segment-item textarea {
+            min-height: 52px;
+            font-size: 13px;
+        }
+        .segment-item .seg-edit-btn {
+            margin-top: 8px;
+            padding: 8px 14px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .segment-item .seg-edit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -225,11 +333,17 @@
 
             <div class="row">
                 <div class="form-group">
-                    <label for="aspect_ratio">画面比例</label>
-                    <select id="aspect_ratio">
-                        <option value="16:9">16:9 横屏（B站/YouTube）</option>
-                        <option value="9:16" selected>9:16 竖屏（抖音/视频号）</option>
-                    </select>
+                    <label>画面比例（可多选，一次生成多画幅）</label>
+                    <div class="aspect-options">
+                        <label>
+                            <input type="checkbox" class="aspect-box" value="16:9">
+                            16:9 横屏（B站/YouTube）
+                        </label>
+                        <label>
+                            <input type="checkbox" class="aspect-box" value="9:16" checked>
+                            9:16 竖屏（抖音/视频号）
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="voice">配音音色</label>
@@ -240,6 +354,30 @@
                         <option value="wenrouvsheng">温柔女声</option>
                     </select>
                 </div>
+            </div>
+
+            <div class="form-group">
+                <label>素材上传（可选，单个文件 ≤ 20MB）</label>
+                <div class="upload-grid">
+                    <div>
+                        <label class="upload-label" for="bgmFile">背景音乐 BGM（mp3/wav，优先于内置垫乐）</label>
+                        <input type="file" id="bgmFile" accept=".mp3,.wav">
+                    </div>
+                    <div>
+                        <label class="upload-label" for="coverFile">封面底图（jpg/png，优先于自动封面）</label>
+                        <input type="file" id="coverFile" accept=".jpg,.jpeg,.png">
+                    </div>
+                </div>
+                <div style="margin-top: 12px;">
+                    <label class="upload-label" for="scriptFile">故事文稿 txt（上传后跳过 AI 写稿，直接出片）</label>
+                    <input type="file" id="scriptFile" accept=".txt">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="mediaDir">本地素材目录（可选，优先使用自己的照片/视频）</label>
+                <input type="text" id="mediaDir"
+                       placeholder="例如：/home/user/Pictures/小区素材（照片自动配到各段，视频截取配音时长做画面；不够的段自动网上补图）">
             </div>
 
             <div class="form-group" style="margin-top: 4px;">
@@ -274,10 +412,13 @@
             <div class="error-msg" id="errorMsg"></div>
 
             <div class="result-area" id="resultArea">
-                <video id="resultVideo" controls></video>
+                <div id="resultList"></div>
                 <div class="result-actions">
-                    <a href="#" class="btn-primary" id="downloadBtn">下载视频</a>
                     <a href="#" class="btn-secondary" onclick="location.reload()">再做一个</a>
+                </div>
+                <div class="segments-area" id="segmentsArea">
+                    <h4>分段文稿（改词后只重新配音该段并重新合成，其余段不动）</h4>
+                    <div id="segmentList"></div>
                 </div>
             </div>
         </div>
@@ -287,10 +428,38 @@
         let pollTimer = null;
         let currentTaskId = null;
 
+        const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+        // 上传单个素材：先 POST /api/upload 拿 upload_id，生成时随 JSON 回传给后端
+        async function uploadAsset(file, type) {
+            if (file.size > MAX_UPLOAD_BYTES) {
+                throw new Error(`「${file.name}」超过 20MB 上限，请压缩后再试`);
+            }
+            const fd = new FormData();
+            fd.append('type', type);
+            fd.append('file', file);
+            const resp = await fetch('/api/upload', { method: 'POST', body: fd });
+            const result = await resp.json();
+            if (result.error) {
+                throw new Error(result.error);
+            }
+            return result.upload_id;
+        }
+
         async function startGenerate() {
             const topic = document.getElementById('topic').value.trim();
-            if (!topic) {
-                alert('请输入视频主题');
+            const scriptFile = document.getElementById('scriptFile').files[0];
+            // 主题与文稿二选一：上传了 txt 文稿就不强制填主题（后端从文稿首行提炼）
+            if (!topic && !scriptFile) {
+                alert('请输入视频主题，或上传 txt 故事文稿');
+                return;
+            }
+
+            // 画幅多选：勾选几个就一次生成几版（同一故事稿，配音只配一次）
+            const aspects = Array.from(document.querySelectorAll('.aspect-box:checked'))
+                .map(cb => cb.value);
+            if (!aspects.length) {
+                alert('请至少选择一个画面比例');
                 return;
             }
 
@@ -302,12 +471,27 @@
             const data = {
                 topic: topic,
                 extra: document.getElementById('extra').value.trim(),
-                aspect_ratio: document.getElementById('aspect_ratio').value,
+                aspect_ratios: aspects,
                 voice: document.getElementById('voice').value,
                 auto: document.getElementById('autoMode').checked,
+                media_dir: document.getElementById('mediaDir').value.trim(),
             };
 
             try {
+                // 依次上传选中的素材（可选）；有文稿时以文稿直出，主题可留空
+                const uploads = [
+                    [document.getElementById('bgmFile').files[0], 'bgm', 'bgm_upload_id'],
+                    [document.getElementById('coverFile').files[0], 'cover', 'cover_upload_id'],
+                    [scriptFile, 'script', 'script_upload_id'],
+                ];
+                for (const [file, type, key] of uploads) {
+                    if (file) {
+                        btn.textContent = `上传素材中（${type}）...`;
+                        data[key] = await uploadAsset(file, type);
+                    }
+                }
+
+                btn.textContent = '生成中...';
                 const resp = await fetch('/api/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -358,10 +542,11 @@
 
                     if (task.status === 'completed') {
                         clearInterval(pollTimer);
-                        showResult(task.output_rel_path || task.output_file, task.output_file);
+                        showResult(task);
                     } else if (task.status === 'failed') {
                         clearInterval(pollTimer);
-                        showError(task.message + '\n' + (task.traceback || ''));
+                        // 后端不返回 traceback，只展示对用户可读的 message
+                        showError(task.message);
                     }
                 } catch (e) {
                     clearInterval(pollTimer);
@@ -434,7 +619,9 @@
             document.getElementById('percentText').textContent = percent + '%';
         }
 
-        function showResult(filePath, downloadName) {
+        const ASPECT_LABELS = { '16:9': '16:9 横屏版', '9:16': '9:16 竖屏版' };
+
+        function showResult(task) {
             const btn = document.getElementById('generateBtn');
             btn.disabled = false;
             btn.textContent = '开始生成';
@@ -444,12 +631,117 @@
             const resultArea = document.getElementById('resultArea');
             resultArea.classList.add('active');
 
-            const video = document.getElementById('resultVideo');
-            video.src = '/api/download/' + encodeURIComponent(filePath);
+            // 多画幅任务后端返回 outputs 数组；旧后端/单画幅回退 output_file 字段
+            const outputs = (Array.isArray(task.outputs) && task.outputs.length)
+                ? task.outputs
+                : [{ file: task.output_file, rel_path: task.output_rel_path || task.output_file }];
 
-            const downloadBtn = document.getElementById('downloadBtn');
-            downloadBtn.href = '/api/download/' + encodeURIComponent(filePath);
-            downloadBtn.download = downloadName || filePath.split('/').pop();
+            const list = document.getElementById('resultList');
+            list.innerHTML = '';
+            for (const o of outputs) {
+                const item = document.createElement('div');
+                item.className = 'result-item';
+                const href = '/api/download/' + encodeURIComponent(o.rel_path || o.file);
+                const label = o.aspect ? (ASPECT_LABELS[o.aspect] || o.aspect) : '';
+                if (label) {
+                    const p = document.createElement('p');
+                    p.className = 'output-label';
+                    p.textContent = label;
+                    item.appendChild(p);
+                }
+                const video = document.createElement('video');
+                video.controls = true;
+                // 改词重跑（D6）后 mp4 路径不变，加时间戳参数强制浏览器重新拉取
+                video.src = href + '?t=' + Date.now();
+                item.appendChild(video);
+                const link = document.createElement('a');
+                link.href = href;
+                link.download = o.file || (o.rel_path || '').split('/').pop();
+                link.textContent = '下载' + (label || '视频');
+                item.appendChild(link);
+                list.appendChild(item);
+            }
+            loadSegments(task);
+        }
+
+        // ---------- 分段列表 + 改词重跑（D6） ----------
+        // 优先走 /api/segments 拿段状态；接口异常时回退 /api/status 自带的
+        // segments 字段，列表渲染不出来也不影响视频展示
+        async function loadSegments(task) {
+            const area = document.getElementById('segmentsArea');
+            const list = document.getElementById('segmentList');
+            let segments = null;
+            try {
+                const resp = await fetch('/api/segments/' + currentTaskId);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    segments = data.segments;
+                }
+            } catch (e) { /* 回退 status 字段 */ }
+            if (!Array.isArray(segments) || !segments.length) {
+                segments = Array.isArray(task.segments) ? task.segments : [];
+            }
+            if (!segments.length) {
+                area.classList.remove('active');
+                return;
+            }
+            list.innerHTML = '';
+            segments.forEach((seg, i) => {
+                const item = document.createElement('div');
+                item.className = 'segment-item';
+                const meta = document.createElement('div');
+                meta.className = 'seg-meta';
+                const dur = Number(seg.duration || 0).toFixed(1);
+                meta.textContent = '第 ' + (i + 1) + ' 段 · ' + dur + 's'
+                    + (seg.audio_error ? '（本段无配音: ' + seg.audio_error + '）' : '');
+                const ta = document.createElement('textarea');
+                ta.id = 'segText' + i;
+                ta.value = seg.text || '';
+                const btn = document.createElement('button');
+                btn.className = 'seg-edit-btn';
+                btn.textContent = '改词重跑';
+                btn.onclick = () => editSegment(i, btn);
+                item.appendChild(meta);
+                item.appendChild(ta);
+                item.appendChild(btn);
+                list.appendChild(item);
+            });
+            area.classList.add('active');
+        }
+
+        // 改词重跑：POST /api/segment/edit → 后端只重新 TTS 该段并局部重合成；
+        // 进度条接管反馈，完成后 pollStatus→showResult 会整体重渲（新视频 + 新分段列表）
+        async function editSegment(index, btn) {
+            const ta = document.getElementById('segText' + index);
+            const text = (ta.value || '').trim();
+            if (!text) {
+                alert('分段内容不能为空');
+                return;
+            }
+            if (!currentTaskId) return;
+            btn.disabled = true;
+            btn.textContent = '重跑中...';
+            document.getElementById('resultArea').classList.remove('active');
+            document.getElementById('progressArea').classList.add('active');
+            updateProgress(0, '第 ' + (index + 1) + ' 段重新配音中...');
+            try {
+                const resp = await fetch('/api/segment/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: currentTaskId, index: index, text: text }),
+                });
+                const result = await resp.json();
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                pollStatus(currentTaskId);
+            } catch (e) {
+                showError(e.message);
+                document.getElementById('resultArea').classList.add('active');
+                document.getElementById('progressArea').classList.remove('active');
+                btn.disabled = false;
+                btn.textContent = '改词重跑';
+            }
         }
 
         function showError(msg) {

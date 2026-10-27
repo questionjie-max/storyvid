@@ -1,9 +1,7 @@
 """生成故事文字稿"""
-from openai import OpenAI
-from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+import json
 
-client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
-
+import llm
 
 SYSTEM_PROMPT = """你是一位资深的故事解说文案撰写专家。
 请根据用户提供的主题，撰写一段适合视频解说的故事文案。
@@ -34,18 +32,12 @@ def generate_story(topic: str, extra_requirements: str = "") -> str:
     if extra_requirements:
         user_prompt += f"\n额外要求：{extra_requirements}"
 
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
+    return llm.chat(
+        user_prompt,
+        system=SYSTEM_PROMPT,
         temperature=0.8,
         max_tokens=3000,
     )
-
-    story = response.choices[0].message.content.strip()
-    return story
 
 
 def split_story_into_segments(story: str) -> list[dict]:
@@ -67,7 +59,8 @@ def split_story_into_segments(story: str) -> list[dict]:
 
     # 如果没有 [段落] 标记，就按句子数简单分段
     if len(segments) <= 1:
-        sentences = re.split(r'(?<=[。！？\.\!\?])\s+', story)
+        # 中文句尾通常没有空格，直接在句末标点后切分
+        sentences = re.split(r'(?<=[。！？!?])\s*|(?<=[.!])\s+', story)
         segments = []
         current = ""
         for s in sentences:
@@ -94,34 +87,55 @@ def generate_image_keywords(segments: list[dict], topic: str) -> list[dict]:
 故事段落：
 """
     for i, seg in enumerate(segments):
-        prompt += f"\n段落{i+1}：{seg['text'][:100]}..."
+        excerpt = seg["text"][:100]
+        if len(seg["text"]) > 100:
+            excerpt += "..."
+        prompt += f"\n段落{i+1}：{excerpt}"
 
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": "你是一个图片搜索关键词生成专家。只输出英文关键词，每行一个。"},
-            {"role": "user", "content": prompt},
-        ],
+    response = llm.chat(
+        prompt,
+        system="你是一个图片搜索关键词生成专家。只输出英文关键词，每行一个。",
         temperature=0.7,
         max_tokens=500,
     )
 
-    keywords = response.choices[0].message.content.strip().split('\n')
-    keywords = [k.strip().strip('"').strip("'").strip('- ') for k in keywords if k.strip()]
+    keywords = [k.strip().strip('"').strip("'").strip('- ')
+                for k in response.split('\n') if k.strip()]
 
     for i, seg in enumerate(segments):
-        if i < len(keywords):
-            seg["image_keyword"] = keywords[i]
-        else:
-            seg["image_keyword"] = topic
+        seg["image_keyword"] = keywords[i] if i < len(keywords) else topic
 
     return segments
 
 
+def fill_fallback_keywords(segments: list[dict], topic: str) -> list[dict]:
+    """不调用 LLM 的配图关键词兜底：直接用主题填充每段关键词。
+
+    文稿直出模式（用户自带故事稿）使用：与 generate_image_keywords
+    在 LLM 返回行数不足时的兜底逻辑一致（`keywords[i] if i < len(keywords) else topic`），
+    保证传入文稿后整条管线一次 llm.chat 都不发生。
+    """
+    for seg in segments:
+        if not seg.get("image_keyword"):
+            seg["image_keyword"] = topic
+    return segments
+
+
+def derive_topic_from_script(script: str) -> str:
+    """用户自带文稿但没填主题时，从文稿第一个非空行提炼主题。
+
+    用于项目目录命名与片头/封面文案：取首行前 20 个字符，
+    容忍 Markdown 标题的 # 标记。
+    """
+    for line in script.splitlines():
+        line = line.strip().lstrip("#").strip()
+        if line:
+            return line[:20]
+    return "自定义文稿"
+
+
 def self_review_story(story: str, topic: str) -> dict:
     """自我校验故事文案的数据准确性和逻辑合理性"""
-    import json
-
     prompt = f"""你是一个严格的内容审核员。请仔细审核以下关于「{topic}」的视频解说文案，检查以下问题：
 
 1. 数据准确性：文中提到的数字、日期、比例是否合理？是否有明显编造的痕迹？
@@ -142,26 +156,16 @@ def self_review_story(story: str, topic: str) -> dict:
 }}
 """
 
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=1500,
-    )
-
-    content = response.choices[0].message.content.strip()
     try:
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-        return json.loads(content)
+        content = llm.chat(prompt, temperature=0.3, max_tokens=1500)
+        return llm.parse_json_loose(content)
     except Exception as e:
         return {"passed": True, "issues": [f"解析审核结果失败: {e}"], "severity": "low", "improved_version": ""}
 
 
 def generate_story_with_retry(topic: str, extra_requirements: str = "", max_retries: int = 2) -> str:
     """带自我校验和重试的故事生成"""
+    story = ""
     for attempt in range(max_retries + 1):
         story = generate_story(topic, extra_requirements)
         review = self_review_story(story, topic)

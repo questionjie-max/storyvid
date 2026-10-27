@@ -1,0 +1,52 @@
+[build-system]
+# >=77 才支持 PEP 639 的 license = "MIT"（SPDX 字符串）与 license-files；
+# 61–76 的内置校验 schema 中 project.license 只有 {file}/{text} 两个对象分支，
+# 老环境下构建会在 pyproject 校验阶段直接失败（见下方 license = "MIT"）
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "storyvid"
+version = "0.2.0"
+description = "AI 短视频生成工作流：搜索 → 审核 → 写稿 → 配音 → 配图 → 字幕 → 合成"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+# 依赖与 requirements.txt 保持同源：打包层不再手抄一份，避免两处漂移
+dynamic = ["dependencies"]
+
+[project.scripts]
+storyvid = "main:main"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+# 仓库是扁平布局：13 个顶层模块 + web/ 子包，显式声明以免自动发现把
+# output/ temp/ docs/ tests/ 等目录也卷进构建
+[tool.setuptools]
+py-modules = [
+    "aligner",
+    "config",
+    "cover",
+    "demo",
+    "images",
+    "llm",
+    "main",
+    "research",
+    "story",
+    "subtitles",
+    "tts",
+    "tts_ws",
+    "video",
+]
+packages = ["web"]
+
+# web/app.py 的 Flask(template_folder="templates") 相对 app.py 所在目录定位，
+# 非 editable（pipx）安装时模板必须随包分发才能被找到
+[tool.setuptools.package-data]
+"web" = ["templates/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
