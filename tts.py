@@ -7,6 +7,7 @@ import time
 import uuid
 import base64
 import binascii
+import hashlib
 import subprocess
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -31,6 +32,39 @@ def _is_ready_file(path: str) -> bool:
         return bool(path) and os.path.isfile(path) and os.path.getsize(path) > 0
     except OSError:
         return False
+
+
+def _audio_text_snapshot_path(audio_path: str) -> str:
+    """音频的「按哪段文本合成」快照边车文件（segment_XXX.mp3.sha1）"""
+    return audio_path + ".sha1"
+
+
+def _audio_matches_text(audio_path: str, text: str) -> bool:
+    """断点续跑复用判据（文本一致性）：音频存在且边车哈希与本次文本一致。
+
+    项目目录按「日期_主题」命名，同主题同一天重跑会落在同一目录，而 LLM
+    每次生成的文稿措辞不同——旧音频与新文本错配时，字幕按新文本的真实
+    时间片切块、配音却是旧文稿，声画各说各话（质量循环实测复现）。
+    合法续跑（中断重跑）文本不变、哈希一致，照常复用不浪费已花的调用；
+    本修复之前生成的音频没有快照，保守起见不复用、重新合成一次。
+    """
+    if not _is_ready_file(audio_path):
+        return False
+    try:
+        with open(_audio_text_snapshot_path(audio_path), "r", encoding="utf-8") as f:
+            saved = f.read().strip()
+    except OSError:
+        return False
+    return saved == hashlib.sha1((text or "").encode("utf-8")).hexdigest()
+
+
+def _write_audio_text_snapshot(audio_path: str, text: str) -> None:
+    """生成成功后写文本快照，供续跑判据比对；写失败只损失续跑判据，不阻塞出片"""
+    try:
+        with open(_audio_text_snapshot_path(audio_path), "w", encoding="utf-8") as f:
+            f.write(hashlib.sha1((text or "").encode("utf-8")).hexdigest())
+    except OSError as e:
+        print(f"[TTS] 音频文本快照写入失败（只影响续跑判据，不影响成片）: {e}")
 
 
 def _get_ffmpeg() -> str:
@@ -794,6 +828,9 @@ def generate_all_speech(
 
     断点续跑：项目目录里已存在且非空的 segment_XXX.mp3 直接复用，
     不再调 TTS API、不再做响度归一（中断重跑不浪费已花钱的调用）；
+    复用判据含文本一致性（边车快照 segment_XXX.mp3.sha1 与本次段落文本
+    哈希比对）——同主题同日重跑时 LLM 会生成不同措辞的新文稿，旧音频
+    与新文本错配（字幕按新文本切、配音是旧文稿）必须重新合成；
     复用段会打上 audio_reused=True 标记（main.py 据此输出复用提示）。
     单段失败自动重试 2 次（退避 2s/8s，见 TTS_RETRY_DELAYS），仍失败才
     标记跳过（该段无音频，合成时静音跳过），不中断整个流程。
@@ -813,8 +850,9 @@ def generate_all_speech(
     def _task(args):
         i, seg = args
         audio_path = os.path.join(proj_dir, f"segment_{i:03d}.mp3")
-        if _is_ready_file(audio_path):
-            # 断点续跑：上次已生成成功的段（存在且非空）直接复用，省掉重复 API 调用
+        if _audio_matches_text(audio_path, seg.get("text", "")):
+            # 断点续跑：上次已生成成功的段（存在且非空、文本哈希一致）直接复用，
+            # 省掉重复 API 调用；同日重跑文稿变了哈希不符 → 重新合成，不错配
             print(f"[TTS] 第 {i+1}/{total} 段已存在（{os.path.basename(audio_path)}），"
                   f"跳过生成直接复用")
             # 复用段没有本次合成的时间戳（旧音频与本次请求无对应关系），
@@ -837,6 +875,7 @@ def generate_all_speech(
                     time.sleep(delay)
         if last_error is not None:
             raise last_error
+        _write_audio_text_snapshot(audio_path, seg.get("text", ""))
         normalize_loudness(audio_path)  # 归一失败时内部回退原文件，不会抛异常
         duration = get_audio_duration(audio_path)
 

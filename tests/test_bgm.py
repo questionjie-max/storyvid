@@ -89,7 +89,7 @@ class TestBgmConfig:
     """BGM_VOLUME / BGM_TEMP 环境变量解析与钳制"""
 
     def test_env_parsing_and_fallback(self, monkeypatch):
-        """BGM_VOLUME 浮点解析（非法值回退 0=关）；BGM_TEMP 大小写归一并回退 warm"""
+        """BGM_VOLUME 浮点解析（非法值回退默认 0.2）；BGM_TEMP 大小写归一并回退 warm"""
         before_keys = set(os.environ)
         snapshot = {k: getattr(config, k) for k in ("BGM_VOLUME", "BGM_TEMP")}
         try:
@@ -102,24 +102,25 @@ class TestBgmConfig:
             monkeypatch.setenv("BGM_VOLUME", "abc")
             monkeypatch.setenv("BGM_TEMP", "jazz")
             importlib.reload(config)
-            assert config.BGM_VOLUME == 0.0  # 非法值回退默认（0=关闭）
+            assert config.BGM_VOLUME == pytest.approx(0.2)  # 非法值回退默认
             assert config.BGM_TEMP == "warm"  # 未知风格回退 warm
 
             monkeypatch.setenv("BGM_VOLUME", "")
             importlib.reload(config)
-            assert config.BGM_VOLUME == 0.0  # 空串视为未配置
+            assert config.BGM_VOLUME == pytest.approx(0.2)  # 空串视为未配置
         finally:
             for k in set(os.environ) - before_keys:
                 os.environ.pop(k, None)
             for k, v in snapshot.items():
                 setattr(config, k, v)
 
-    def test_default_volume_is_zero(self, monkeypatch):
-        """BGM_VOLUME 未配置时默认 0 = 关闭（保持旧行为，不合成不混音）"""
+    def test_default_volume_is_low_bed(self, monkeypatch):
+        """BGM_VOLUME 未配置时默认 0.2（质量循环 R4：成片默认带低电平垫乐，
+        配音始终在前）；设 0 可关闭"""
         monkeypatch.delenv("BGM_VOLUME", raising=False)
         importlib.reload(config)
         try:
-            assert config.BGM_VOLUME == 0.0
+            assert config.BGM_VOLUME == pytest.approx(0.2)
         finally:
             importlib.reload(config)
 

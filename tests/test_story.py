@@ -100,3 +100,41 @@ class TestRetry:
             lambda *a: {"passed": False, "issues": ["x"], "improved_version": ""},
         )
         assert story.generate_story_with_retry("主题", max_retries=1) == "最后一版"
+
+
+class TestImageKeywordsRetry:
+    """质量循环 R2：OpenCode 网关间歇性空返回 → 重试 + 非英文行过滤"""
+
+    def _segs(self, n):
+        return [{"text": "段落" + str(i) * 10, "image_keyword": ""} for i in range(n)]
+
+    def test_retry_recovers_from_empty_then_success(self, monkeypatch):
+        """空返回重试后拿到关键词：不再退化成中文主题"""
+        calls = {"n": 0}
+
+        def flaky_chat(*a, **k):
+            calls["n"] += 1
+            return "" if calls["n"] < 3 else "palace corridor\nrusty arrow\nnight sky"
+
+        monkeypatch.setattr(story.llm, "chat", flaky_chat)
+        monkeypatch.setattr(story.time, "sleep", lambda s: None)
+        result = story.generate_image_keywords(self._segs(3), "故宫的未解之谜")
+        assert [s["image_keyword"] for s in result] == [
+            "palace corridor", "rusty arrow", "night sky"]
+        assert calls["n"] == 3, "前两次空返回应触发重试"
+
+    def test_all_empty_falls_back_to_topic(self, monkeypatch):
+        """全部空返回：保持旧兜底行为(主题)，不抛异常"""
+        monkeypatch.setattr(story.llm, "chat", lambda *a, **k: "")
+        monkeypatch.setattr(story.time, "sleep", lambda s: None)
+        result = story.generate_image_keywords(self._segs(2), "故宫的未解之谜")
+        assert [s["image_keyword"] for s in result] == ["故宫的未解之谜", "故宫的未解之谜"]
+
+    def test_cjk_lines_filtered(self, monkeypatch):
+        """模型混入的中文说明行被过滤，不计入关键词"""
+        def chat_with_cjk(*a, **k):
+            return "以下是关键词：\npalace corridor\nrusty arrow"
+
+        monkeypatch.setattr(story.llm, "chat", chat_with_cjk)
+        result = story.generate_image_keywords(self._segs(2), "故宫的未解之谜")
+        assert [s["image_keyword"] for s in result] == ["palace corridor", "rusty arrow"]

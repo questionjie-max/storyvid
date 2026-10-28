@@ -452,7 +452,7 @@ class TestSubtitleStyles:
             cwd=repo, env=env, capture_output=True, text=True, timeout=60,
         )
         assert r.returncode == 0, f"import config 不应崩溃: {r.stderr}"
-        assert "42 170 24 24000 24 5000 1.15" in r.stdout  # 全部非法参数都回退默认值
+        assert "26 170 24 24000 24 5000 1.15" in r.stdout  # 全部非法参数都回退默认值
 
     def test_card_style_end_to_end(self, proj_dir, tmp_path, monkeypatch):
         """card 样式走完整合成管线（create_video）也能出片"""
@@ -1030,13 +1030,14 @@ class TestKenBurns:
         overlay = video._subtitle_overlay_rgba("一句字幕", 480, 270)
         assert overlay.mode == "RGBA"
         arr = np.asarray(overlay)
-        # 480×270 横屏：bar_y = 270-(54+40)-40 = 136，其上应全透明
-        assert arr[:130, :, 3].max() == 0
+        # 480×270 横屏：bar_y = 270-(54+40)-60 = 116（R5 起横屏底边距 60），其上应全透明
+        assert arr[:110, :, 3].max() == 0
         # 字幕条底部远离文字 → 半透明（plain 黑条 alpha≈160）
         bar_alpha = int(arr[268, 240, 3])
         assert 120 <= bar_alpha <= 200, f"字幕条应为半透明，实际 {bar_alpha}"
         # 全图应存在不透明像素（文字/描边）
         assert arr[:, :, 3].max() == 255
+
 
     def test_overlay_matches_baked_render_on_any_background(self, monkeypatch):
         """叠加层合成到任意底色上应与直接烘焙渲染一致（差分抠像数学等价）"""
@@ -1111,6 +1112,30 @@ class TestKenBurns:
         out = tmp_path / "degrade.mp4"
         video.create_video(segments, str(out), width=480, height=270)
         assert out.exists()
+
+
+class TestSubtitleBottomMargin:
+    """质量循环 R5：字幕条底边距安全区（竖屏 240 / 横屏 60,可配置）"""
+
+    def test_auto_margin_portrait_and_landscape(self):
+        """竖屏取 240（避开平台底部 UI），横屏取 60"""
+        assert video._subtitle_bottom_margin(540, 960) == 240
+        assert video._subtitle_bottom_margin(480, 270) == 60
+
+    def test_explicit_config_wins(self, monkeypatch):
+        monkeypatch.setattr(config, "SUBTITLE_BOTTOM_MARGIN", 300)
+        assert video._subtitle_bottom_margin(540, 960) == 300
+        monkeypatch.setattr(config, "SUBTITLE_BOTTOM_MARGIN", 0)
+        assert video._subtitle_bottom_margin(540, 960) == 240  # 0 = 回自动
+
+    def test_portrait_overlay_bar_above_platform_ui(self):
+        """竖屏叠加层：字幕文字（不透明像素）整体位于底部 240px 安全区之上
+        （半透明底条按设计延伸到画面底边，平台 UI 反正覆盖在视频之上）"""
+        overlay = video._subtitle_overlay_rgba("一句字幕", 540, 960)
+        arr = np.asarray(overlay)
+        rows = np.where((arr[:, :, 3] == 255).any(axis=1))[0]  # 文字笔画 = 全不透明
+        assert rows.max() <= 960 - 240 + 25, (
+            f"字幕文字侵入底部安全区:最低行 {rows.max()} > {960 - 240}")
 
 
 class TestCrossfade:

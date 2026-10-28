@@ -1,6 +1,7 @@
 """tts.py：时长探测、提供商分发、单段失败容忍、响度归一、火山引擎 volc 接入"""
 import base64
 import binascii
+import hashlib
 import os
 import re
 import subprocess
@@ -506,7 +507,8 @@ class _FakeTime:
 
 
 class TestGenerateAllSpeechResume:
-    """断点续跑：已存在且非空的 segment_XXX.mp3 直接复用，不再花 API 调用"""
+    """断点续跑：已存在且非空、文本快照一致的 segment_XXX.mp3 直接复用，
+    不再花 API 调用；同日重跑文稿变了（快照不符）必须重新合成"""
 
     @pytest.fixture(autouse=True)
     def _no_audio_probe(self, monkeypatch):
@@ -518,8 +520,12 @@ class TestGenerateAllSpeechResume:
         monkeypatch.setattr(config, "PROJECT_DIR", str(tmp_path))
         monkeypatch.setattr(config, "TEMP_DIR", str(tmp_path))
 
+        seg0_text = "第一段已有成品音频。"
         pre = tmp_path / "segment_000.mp3"
         pre.write_bytes(b"pre-existing-audio-bytes")
+        # 文本快照边车：与本次段落文本一致才可复用（断点续跑判据，见 _audio_matches_text）
+        pre.with_suffix(".mp3.sha1").write_text(
+            hashlib.sha1(seg0_text.encode("utf-8")).hexdigest(), encoding="utf-8")
 
         gen_calls = []
         norm_calls = []
@@ -588,6 +594,9 @@ class TestGenerateAllSpeechResumeRealAudio:
             pytest.skip("imageio-ffmpeg 不可用")
         monkeypatch.setattr(config, "PROJECT_DIR", str(tmp_path))
         monkeypatch.setattr(config, "TEMP_DIR", str(tmp_path))
+        # 文本快照边车：与本次段落文本一致才可复用（见 _audio_matches_text）
+        pre.with_suffix(".mp3.sha1").write_text(
+            hashlib.sha1("真实音频复用段。".encode("utf-8")).hexdigest(), encoding="utf-8")
         monkeypatch.setattr(tts, "generate_speech",
                             lambda *a, **k: (_ for _ in ()).throw(
                                 AssertionError("已有成品音频不应再生成")))
@@ -601,6 +610,58 @@ class TestGenerateAllSpeechResumeRealAudio:
         assert result[0]["audio_reused"] is True
         assert not result[0]["audio_error"]
         assert 1.5 <= result[0]["duration"] <= 3.0  # 真实时长来自 mutagen/ffmpeg 探测
+
+    def test_stale_text_audio_is_regenerated(self, tmp_path, monkeypatch):
+        """同日重跑文稿变了(快照哈希不符)：旧音频不得复用,重新合成并写新快照"""
+        monkeypatch.setattr(config, "PROJECT_DIR", str(tmp_path))
+        monkeypatch.setattr(config, "TEMP_DIR", str(tmp_path))
+
+        stale = tmp_path / "segment_000.mp3"
+        stale.write_bytes(b"yesterdays-audio")
+        stale.with_suffix(".mp3.sha1").write_text(
+            hashlib.sha1("上一次运行的旧文稿。".encode("utf-8")).hexdigest(), encoding="utf-8")
+
+        gen_calls = []
+
+        def fake_generate_speech(text, output_path, provider="", voice=""):
+            gen_calls.append((text, output_path))
+            with open(output_path, "wb") as f:
+                f.write(b"fresh audio for new text")
+
+        monkeypatch.setattr(tts, "generate_speech", fake_generate_speech)
+        monkeypatch.setattr(tts, "normalize_loudness", lambda p: p)
+
+        segments = [{"text": "本次运行的新文稿。", "duration": 0, "image_keyword": ""}]
+        result = tts.generate_all_speech(segments)
+
+        assert gen_calls and gen_calls[0][0] == "本次运行的新文稿。"
+        assert result[0].get("audio_reused") is None  # 不是复用,是重新生成
+        # 新音频带上了本次文本的快照,下次同文本续跑才能复用
+        assert stale.with_suffix(".mp3.sha1").read_text(encoding="utf-8") == \
+            hashlib.sha1("本次运行的新文稿。".encode("utf-8")).hexdigest()
+
+    def test_legacy_audio_without_snapshot_regenerated(self, tmp_path, monkeypatch):
+        """本修复之前生成的音频没有快照:保守起见不复用,重新合成一次"""
+        monkeypatch.setattr(config, "PROJECT_DIR", str(tmp_path))
+        monkeypatch.setattr(config, "TEMP_DIR", str(tmp_path))
+
+        legacy = tmp_path / "segment_000.mp3"
+        legacy.write_bytes(b"legacy-audio-no-snapshot")
+
+        gen_calls = []
+
+        def fake_generate_speech(text, output_path, provider="", voice=""):
+            gen_calls.append(output_path)
+            with open(output_path, "wb") as f:
+                f.write(b"fresh")
+
+        monkeypatch.setattr(tts, "generate_speech", fake_generate_speech)
+        monkeypatch.setattr(tts, "normalize_loudness", lambda p: p)
+
+        result = tts.generate_all_speech(
+            [{"text": "任意文本。", "duration": 0, "image_keyword": ""}])
+        assert gen_calls == [str(legacy)]
+        assert result[0].get("audio_reused") is None
 
 
 class TestGenerateAllSpeechRetry:

@@ -758,6 +758,9 @@ class TestGenerateAllSpeechChannel:
         self._pipeline_mocks(monkeypatch, tmp_path, fetch)
         pre = tmp_path / "segment_000.mp3"
         pre.write_bytes(b"pre-existing")
+        # 文本快照边车：与本次段落文本一致才可复用（见 tts._audio_matches_text）
+        pre.with_suffix(".mp3.sha1").write_text(
+            hashlib.sha1("复用的旧音频段。".encode("utf-8")).hexdigest(), encoding="utf-8")
         segments = [{"text": "复用的旧音频段。", "duration": 0, "image_keyword": ""}]
         result = tts.generate_all_speech(segments)
         assert result[0]["audio_reused"] is True

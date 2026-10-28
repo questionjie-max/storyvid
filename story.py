@@ -1,5 +1,6 @@
 """生成故事文字稿"""
 import json
+import time
 
 import llm
 
@@ -77,8 +78,21 @@ def split_story_into_segments(story: str) -> list[dict]:
     return segments
 
 
-def generate_image_keywords(segments: list[dict], topic: str) -> list[dict]:
-    """为每段生成配图搜索关键词（英文，方便搜图）"""
+def _is_ascii(text: str) -> bool:
+    """关键词是否可直接进英文图片库搜索：不含 CJK 等非 ASCII 字符"""
+    return all(ord(c) < 128 for c in text)
+
+
+def generate_image_keywords(segments: list[dict], topic: str,
+                            max_retries: int = 2) -> list[dict]:
+    """为每段生成配图搜索关键词（英文，方便搜图）
+
+    OpenCode 网关间歇性返回空 content（质量循环实测：同一 prompt 6 次调用
+    5 次返回空字符串），空返回会让每段关键词都退化成中文主题、Unsplash
+    搜不到结果、整片配图随机化。故空返回/行数不足时重试，仍失败才按主题
+    兜底（旧行为）。同时过滤非英文行（模型偶尔混入中文说明），保证关键词
+    可直接进图片库搜索。
+    """
     prompt = f"""为主题为「{topic}」的故事生成配图搜索关键词。
 故事分为以下 {len(segments)} 段，请为每段生成一个适合在图片库搜索的英文关键词或短语（2-4 个英文单词），要求画面感强、具象化。
 
@@ -92,15 +106,23 @@ def generate_image_keywords(segments: list[dict], topic: str) -> list[dict]:
             excerpt += "..."
         prompt += f"\n段落{i+1}：{excerpt}"
 
-    response = llm.chat(
-        prompt,
-        system="你是一个图片搜索关键词生成专家。只输出英文关键词，每行一个。",
-        temperature=0.7,
-        max_tokens=500,
-    )
-
-    keywords = [k.strip().strip('"').strip("'").strip('- ')
-                for k in response.split('\n') if k.strip()]
+    keywords: list[str] = []
+    for attempt in range(max_retries + 1):
+        response = llm.chat(
+            prompt,
+            system="你是一个图片搜索关键词生成专家。只输出英文关键词，每行一个。",
+            temperature=0.7,
+            max_tokens=500,
+        )
+        keywords = [k.strip().strip('"').strip("'").strip('- ')
+                    for k in response.split('\n') if k.strip()]
+        keywords = [k for k in keywords if k and len(k) <= 60 and _is_ascii(k)]
+        if len(keywords) >= len(segments):
+            break
+        print(f"[Story] 配图关键词返回不足（{len(keywords)}/{len(segments)} 段），"
+              f"重试 {attempt + 1}/{max_retries}")
+        if attempt < max_retries:
+            time.sleep(1.5)
 
     for i, seg in enumerate(segments):
         seg["image_keyword"] = keywords[i] if i < len(keywords) else topic

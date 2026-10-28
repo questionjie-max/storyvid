@@ -290,6 +290,18 @@ def _tokenize_highlight_runs(text: str) -> list[tuple[str, bool]]:
     return runs or [(text, False)]
 
 
+def _subtitle_bottom_margin(width: int, height: int) -> int:
+    """字幕条距画面底边（像素）：SUBTITLE_BOTTOM_MARGIN 显式配置优先；
+    0 = 自动：竖屏 240（平台底部 UI 安全区，约 12.5%）/ 横屏 60。
+
+    竖屏旧值 80（约 4%）会被抖音/视频号的文案栏与进度条盖住，质量循环
+    R5 基线实测后调整；三种字幕样式（plain/card/karaoke）共用。
+    """
+    if config.SUBTITLE_BOTTOM_MARGIN > 0:
+        return config.SUBTITLE_BOTTOM_MARGIN
+    return 240 if height > width else 60
+
+
 def _card_geometry(n_lines: int, width: int, height: int) -> tuple[int, int, int, int]:
     """card 样式底部卡片条的位置尺寸 (x, y, w, h)，供绘制与测试共用"""
     font_size = 38 if height > width else 42
@@ -298,7 +310,7 @@ def _card_geometry(n_lines: int, width: int, height: int) -> tuple[int, int, int
     side_margin = max(config.SUBTITLE_CARD_MARGIN, 0)
     card_h = max(n_lines, 1) * line_height + padding * 2
     card_w = width - side_margin * 2
-    bottom = config.SUBTITLE_CARD_BOTTOM_MARGIN or (80 if height > width else 40)
+    bottom = config.SUBTITLE_CARD_BOTTOM_MARGIN or _subtitle_bottom_margin(width, height)
     card_y = max(height - card_h - bottom, 0)
     return side_margin, card_y, card_w, card_h
 
@@ -417,7 +429,7 @@ def _draw_plain_subtitle(img: Image.Image, text: str, width: int, height: int) -
     text_block_height = len(lines) * line_height + 40
 
     # 底部半透明背景条（竖屏更靠下）
-    bottom_margin = 80 if height > width else 40
+    bottom_margin = _subtitle_bottom_margin(width, height)
     bar_y = height - text_block_height - bottom_margin
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     overlay_draw = ImageDraw.Draw(overlay)
@@ -537,7 +549,7 @@ def _draw_karaoke_subtitle(img: Image.Image, text: str, width: int, height: int,
 
     # plain 同款底部半透明黑条
     text_block_height = len(lines) * line_height + 40
-    bottom_margin = 80 if height > width else 40
+    bottom_margin = _subtitle_bottom_margin(width, height)
     bar_y = height - text_block_height - bottom_margin
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     overlay_draw = ImageDraw.Draw(overlay)

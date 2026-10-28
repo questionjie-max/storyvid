@@ -91,3 +91,26 @@ class TestSrt:
         out = tmp_path / "deep" / "dir" / "sub.srt"
         subtitles.generate_srt([{"text": "一句话。", "duration": 2.0}], str(out))
         assert out.exists()
+
+
+class TestDefaultMaxChars26:
+    """质量循环 R1：默认 SUBTITLE_MAX_CHARS 42→26，长句一屏不再挂 6-7.5s"""
+
+    BASELINE_LONG = "清宫档案里，它和一场惊天刺杀有关：嘉庆十八年，天理教起义者攻入紫禁城，直逼内廷。"
+
+    def test_default_splits_baseline_long_sentence(self):
+        """基线实测 40 字长句(原一屏 7.5s)在默认 26 下必须被标点切短"""
+        import config
+        assert config.SUBTITLE_MAX_CHARS == 26
+        chunks = subtitles.split_text_into_chunks(self.BASELINE_LONG)
+        assert len(chunks) > 1, "40 字长句应被切成多块"
+        assert all(len(c) <= 26 for c in chunks)
+        assert "".join(chunks) == self.BASELINE_LONG  # 不丢字
+
+    def test_words_alignment_survives_split(self):
+        """切短后真实词级时间片仍能投影对齐(总时长守恒、无负时长)"""
+        words = [{"word": "字", "start": i * 0.2, "end": (i + 1) * 0.2} for i in range(30)]
+        chunks = subtitles.build_chunk_durations(
+            "第一句很长有逗号，后面还有内容，继续说到句号。", 6.0, words=words)
+        assert all(d > 0 for _t, d in chunks)
+        assert sum(d for _t, d in chunks) == pytest.approx(6.0, abs=0.2)

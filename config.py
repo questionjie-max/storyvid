@@ -156,10 +156,12 @@ FONT_PATH = os.getenv("FONT_PATH", "")
 
 # ---------- 字幕样式（参数集中在这里，video.py 只读不定义） ----------
 # 字幕单块最大字符数（超过会按标点/逗号二次切分）。
+# 26 = 竖屏两行内的短句节奏：40+ 字的整句一屏挂 6-7.5s 观感呆滞（基线实测），
+# 切短后单屏 2-5s 更接近短视频字幕节奏；时间轴仍由真实词级时间片投影保证。
 # 曾是裸 int(os.getenv(...))，配错（如 SUBTITLE_MAX_CHARS=abc）会在 import 阶段
 # 抛 ValueError 崩掉 main.py/web——与 B 队在 A10 检出的 7 个样式参数同类隐患，
 # 统一走 _env_int 守卫（见 overnight_reports/A10_subtitle_style.md、B6_regress.md）。
-SUBTITLE_MAX_CHARS = _env_int("SUBTITLE_MAX_CHARS", 42)
+SUBTITLE_MAX_CHARS = _env_int("SUBTITLE_MAX_CHARS", 26)
 
 # 字幕样式: plain（默认：底部整宽半透明黑条 + 白字黑描边，保持旧行为）
 #          card（底部圆角半透明卡片条 + 主题色描边，数字与引号内关键词用主题色高亮）
@@ -172,6 +174,12 @@ if SUBTITLE_STYLE not in ("plain", "card", "karaoke"):
 
 # card 模式主题色：文字描边与高亮颜色，HEX 格式 #RRGGBB
 SUBTITLE_THEME_COLOR = os.getenv("SUBTITLE_THEME_COLOR", "#FFCD5A")
+
+# 字幕条距画面底边（像素）；0 = 自动：竖屏 240（约 12.5%，避开抖音/视频号
+# 底部 UI 安全区——旧值 80 会被平台文案栏和进度条盖住）/ 横屏 60。
+# 质量循环 R5 新增：plain / karaoke 与 card 的自动回退共用这一套取值
+# （card 另有 SUBTITLE_CARD_BOTTOM_MARGIN 显式配置，优先）。
+SUBTITLE_BOTTOM_MARGIN = _env_int("SUBTITLE_BOTTOM_MARGIN", 0)
 
 # card 模式卡片条参数（数值范围钳制在 video.py 绘制处做，这里只防解析崩溃）
 SUBTITLE_CARD_OPACITY = _env_int("SUBTITLE_CARD_OPACITY", 170)   # 卡片不透明度 0-255
@@ -229,10 +237,11 @@ except ValueError:
 CROSSFADE_SECONDS = max(CROSSFADE_SECONDS, 0.0)  # 负值视为关闭
 
 # ---------- 背景音乐（BGM） ----------
-# 柔和氛围垫乐总音量（0-1）：默认 0 = 关闭（不合成、不混音，保持旧行为）。
-# 推荐范围 0.15~0.35：垫乐按低电平合成（见 video._BGM_STYLES），配音始终在前不被盖过。
-# 非法值由 _env_float 回退默认 0；负值与 >1 在 video._bgm_volume() 钳制。
-BGM_VOLUME = _env_float("BGM_VOLUME", 0.0)
+# 柔和氛围垫乐总音量（0-1）：默认 0.2 = 开启（质量循环第 4 轮：基线成片
+# 完全无 BGM,短视频平台观感单薄；0.2 为推荐区间的低档，垫乐按低电平合成
+# （见 video._BGM_STYLES），配音始终在前不被盖过）。设 0 = 关闭。
+# 非法值由 _env_float 回退默认 0.2；负值与 >1 在 video._bgm_volume() 钳制。
+BGM_VOLUME = _env_float("BGM_VOLUME", 0.2)
 
 # 垫乐风格（温度感）: warm（默认·暖夜） / cool（清凉·稍亮） / deep（低沉·氛围暗）
 # 非法值回退 warm，不中断生成（与 SUBTITLE_STYLE 的兜底策略一致）
