@@ -1574,6 +1574,9 @@ class TestBatchAspect:
         monkeypatch.setattr(config, "VIDEO_FPS", 12)
         monkeypatch.setattr(config, "INTRO_OUTRO", False)
         monkeypatch.setattr(config, "KEN_BURNS", False)
+        # 外挂 SRT 默认关闭（同目录 SRT 会被播放器自动加载成两层字幕）；
+        # 批量用例验证「字幕一份共用」，显式开启
+        monkeypatch.setattr(config, "SUBTITLES_SRT", True)
         return calls
 
     # ---------- 解析 ----------

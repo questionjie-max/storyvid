@@ -240,6 +240,9 @@ class TestDemoWorkflowEndToEnd:
     def test_cli_demo_produces_mp4(self, demo_env, offline_seams, tmp_path,
                                    monkeypatch, capsys):
         """核心验收：python main.py --demo --output demo.mp4 → 项目目录落地成片"""
+        # 外挂 SRT 默认关闭（同目录 SRT 会被播放器自动加载成两层字幕）；
+        # 本用例显式开启以验证落盘行为
+        monkeypatch.setattr(config, "SUBTITLES_SRT", True)
         monkeypatch.setattr(sys, "argv", ["main.py", "--demo", "--output", "demo.mp4"])
         main.main()
         out = capsys.readouterr().out

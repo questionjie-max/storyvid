@@ -117,7 +117,10 @@ class TestBasicRoutes:
 
 
 class TestTwoPhaseFlow:
-    def test_confirm_then_complete(self, client, tmp_path):
+    def test_confirm_then_complete(self, client, tmp_path, monkeypatch):
+        # 外挂 SRT 默认关闭（同目录 SRT 会被播放器自动加载、与烧录字幕叠成
+        # 两层，用户两次反馈的根因）；本用例显式开启以验证落盘行为
+        monkeypatch.setattr(config, "SUBTITLES_SRT", True)
         resp = client.post("/api/generate", json={"topic": "测试主题", "auto": False})
         assert resp.status_code == 200
         task_id = resp.get_json()["task_id"]
@@ -137,6 +140,21 @@ class TestTwoPhaseFlow:
         assert videos[0].stat().st_size > 0
         assert (videos[0].parent / "story.txt").exists()
         assert (videos[0].parent / "subtitles.srt").exists()
+
+    def test_srt_not_written_by_default(self, client, tmp_path):
+        """回归（用户反馈「两层字幕」）：默认不在项目目录落盘 subtitles.srt
+        ——字幕已烧录进画面，同目录 SRT 会被播放器自动加载叠成第二层"""
+        resp = client.post("/api/generate", json={"topic": "无外挂字幕主题", "auto": True})
+        task_id = resp.get_json()["task_id"]
+        wait_status(client, task_id, "completed")
+
+        videos = list((tmp_path / "output").rglob("*.mp4"))
+        assert len(videos) == 1
+        assert not (videos[0].parent / "subtitles.srt").exists(), \
+            "默认关闭外挂 SRT：播放器会自动加载同目录 SRT,与烧录字幕叠成两层"
+        # 管线本身正常跑完（段级状态落盘；字幕烧录由 video 层负责，
+        # 本用例的 create_video 是替身，不产出字幕帧文件）
+        assert (videos[0].parent / "segments.json").exists()
 
     def test_auto_mode_runs_through(self, client, tmp_path):
         resp = client.post("/api/generate", json={"topic": "全自动主题", "auto": True})
@@ -226,6 +244,8 @@ class TestScriptDirect:
     跳过搜索/审核/LLM 写稿，直接进视频管线，全程不调 llm.chat"""
 
     def test_script_without_topic_completes_without_llm(self, client, tmp_path, monkeypatch):
+        # 外挂 SRT 默认关闭（双层字幕根因）；本用例显式开启以验证落盘行为
+        monkeypatch.setattr(config, "SUBTITLES_SRT", True)
         import llm
 
         llm_calls = []
@@ -642,6 +662,8 @@ class TestBatchAspectsWeb:
     TTS 只调一次（音频与画幅无关），第二画幅配图走智能裁切（管线全部 mock，离线）"""
 
     def test_multi_aspect_renders_all(self, client, tmp_path, monkeypatch):
+        # 外挂 SRT 默认关闭（双层字幕根因）；本用例显式开启以验证「字幕一份共用」
+        monkeypatch.setattr(config, "SUBTITLES_SRT", True)
         import tts as tts_mod
         import video as video_mod
 
@@ -846,6 +868,8 @@ class TestSegmentEditAPI:
 
     def test_edit_reruns_only_edited_segment_and_updates_artifacts(
             self, client, monkeypatch):
+        # 外挂 SRT 默认关闭（双层字幕根因）；本用例显式开启以验证改词后重建
+        monkeypatch.setattr(config, "SUBTITLES_SRT", True)
         task_id, project_dir, _, state = self._completed_task(client, monkeypatch)
         calls = self._record_video(monkeypatch)
 

@@ -318,8 +318,12 @@ def _produce_video(story: str, topic: str, output_name: str = "",
     srt_path = os.path.join(project_dir, "subtitles.srt")
     # 片头卡会把正片整体后移，段间交叉淡化会让后一段提前开始——
     # 字幕时间轴同步偏移 + 段间重叠才对得上
-    generate_srt(segments, srt_path, offset=intro_offset(), crossfade=crossfade_seconds())
-    print(f"字幕已保存: {srt_path}")
+    if config.SUBTITLES_SRT:
+        generate_srt(segments, srt_path, offset=intro_offset(), crossfade=crossfade_seconds())
+        print(f"外挂字幕已保存: {srt_path}")
+    else:
+        print("字幕已烧录进画面（外挂 SRT 默认关闭：同目录 SRT 会被播放器"
+              "自动加载、与烧录字幕叠成两层；需要时设 SUBTITLES_SRT=1）")
 
     # 输出名：多画幅时每个画幅追加 _16x9 / _9x16 后缀
     if not output_name:
@@ -388,8 +392,12 @@ def _finish_single_aspect(segments: list[dict], topic: str, project_dir: str,
     srt_path = os.path.join(project_dir, "subtitles.srt")
     # 片头卡会把正片整体后移，段间交叉淡化会让后一段提前开始——
     # 字幕时间轴同步偏移 + 段间重叠才对得上
-    generate_srt(segments, srt_path, offset=intro_offset(), crossfade=crossfade_seconds())
-    print(f"字幕已保存: {srt_path}")
+    if config.SUBTITLES_SRT:
+        generate_srt(segments, srt_path, offset=intro_offset(), crossfade=crossfade_seconds())
+        print(f"外挂字幕已保存: {srt_path}")
+    else:
+        print("字幕已烧录进画面（外挂 SRT 默认关闭：同目录 SRT 会被播放器"
+              "自动加载、与烧录字幕叠成两层；需要时设 SUBTITLES_SRT=1）")
 
     # Step 6: 合成视频
     print("\n[6/7] 合成视频...")

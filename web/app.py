@@ -269,12 +269,15 @@ def _generate_video_task(task_id: str, topic: str, story_text: str, aspect_ratio
             _tasks[task_id]["progress"] = 65
             _tasks[task_id]["message"] = f"语音生成完成（{total_duration:.0f}秒），正在配图..."
 
-        # 字幕（时间轴只由音频时长决定，与画幅无关——一份 SRT 全画幅共用）
-        srt_path = os.path.join(project_dir, "subtitles.srt")
-        # 片头卡会把正片整体后移，段间交叉淡化会让后一段提前开始——
-        # 字幕时间轴同步偏移 + 段间重叠才对得上
-        subtitles.generate_srt(segments, srt_path, offset=video.intro_offset(),
-                               crossfade=video.crossfade_seconds())
+        # 字幕（时间轴只由音频时长决定，与画幅无关——一份 SRT 全画幅共用）。
+        # 外挂 SRT 默认关闭：字幕已烧录进画面，同目录 SRT 会被播放器自动加载、
+        # 与烧录字幕叠成两层（见 config.SUBTITLES_SRT）
+        if config.SUBTITLES_SRT:
+            srt_path = os.path.join(project_dir, "subtitles.srt")
+            # 片头卡会把正片整体后移，段间交叉淡化会让后一段提前开始——
+            # 字幕时间轴同步偏移 + 段间重叠才对得上
+            subtitles.generate_srt(segments, srt_path, offset=video.intro_offset(),
+                                   crossfade=video.crossfade_seconds())
 
         safe_name = "".join(c if c.isalnum() or c in "_- " else "_" for c in topic)
         stem = safe_name[:30].strip()
@@ -1006,10 +1009,13 @@ def _segment_edit_task(task_id: str, seg_index: int, new_text: str):
                                                 project_dir=project_dir)
         total_duration = sum(float(s.get("duration") or 0.0) for s in segments_meta)
 
-        # 4) 字幕按新时长重建（时间轴只由音频时长决定，与画幅无关，一份共用）
-        srt_path = os.path.join(project_dir, "subtitles.srt")
-        subtitles.generate_srt(segments_meta, srt_path, offset=video.intro_offset(),
-                               crossfade=video.crossfade_seconds())
+        # 4) 字幕按新时长重建（时间轴只由音频时长决定，与画幅无关，一份共用）。
+        # 外挂 SRT 默认关闭（同目录 SRT 会被播放器自动加载成两层字幕，
+        # 见 config.SUBTITLES_SRT）；烧录字幕不受影响，始终随新音频重渲
+        if config.SUBTITLES_SRT:
+            srt_path = os.path.join(project_dir, "subtitles.srt")
+            subtitles.generate_srt(segments_meta, srt_path, offset=video.intro_offset(),
+                                   crossfade=video.crossfade_seconds())
 
         _tasks[task_id]["progress"] = 85
         _tasks[task_id]["message"] = f"第 {seg_index + 1} 段配音已更新，正在重新合成..."

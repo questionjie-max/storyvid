@@ -181,6 +181,12 @@ SUBTITLE_THEME_COLOR = os.getenv("SUBTITLE_THEME_COLOR", "#FFCD5A")
 # （card 另有 SUBTITLE_CARD_BOTTOM_MARGIN 显式配置，优先）。
 SUBTITLE_BOTTOM_MARGIN = _env_int("SUBTITLE_BOTTOM_MARGIN", 0)
 
+# 是否在项目目录落盘外挂 SRT（subtitles.srt）。字幕已烧录进画面，而同目录的
+# SRT 会被播放器（PotPlayer / QQ影音 / mpv fuzzy 等）自动加载，与烧录字幕
+# 叠成两层——用户两次看片反馈的「两层字幕」根因（视频本身抽帧验证始终单层）。
+# 默认关闭；需要外挂字幕（平台字幕上传 / 归档 / 剪辑软件导入）时设 1 开启。
+SUBTITLES_SRT = os.getenv("SUBTITLES_SRT", "0").strip().lower() in ("1", "true", "yes", "on")
+
 # card 模式卡片条参数（数值范围钳制在 video.py 绘制处做，这里只防解析崩溃）
 SUBTITLE_CARD_OPACITY = _env_int("SUBTITLE_CARD_OPACITY", 170)   # 卡片不透明度 0-255
 SUBTITLE_CARD_RADIUS = _env_int("SUBTITLE_CARD_RADIUS", 28)      # 圆角半径（像素）

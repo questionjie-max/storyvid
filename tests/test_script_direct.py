@@ -40,6 +40,9 @@ def offline_pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "OUTPUT_DIR", str(tmp_path / "output"))
     monkeypatch.setattr(config, "PROJECT_DIR", None)
     monkeypatch.setattr(config, "TEMP_DIR", None)
+    # 外挂 SRT 默认关闭（同目录 SRT 会被播放器自动加载、与烧录字幕叠成两层，
+    # 用户两次反馈根因）；本夹具显式开启以验证落盘行为
+    monkeypatch.setattr(config, "SUBTITLES_SRT", True)
 
     def fake_speech(segments, provider="", voice="", project_dir=""):
         for s in segments:
